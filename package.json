@@ -1,5 +1,16 @@
 {
-  "devDependencies": {
-    "@playwright/test": "latest"
+  "name": "pellafree-renewal",
+  "version": "1.0.0",
+  "description": "PellaFree 自动续期脚本 - GitHub Actions 版",
+  "type": "module",
+  "scripts": {
+    "start": "node renew.mjs"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.5",
+    "socks-proxy-agent": "^8.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
