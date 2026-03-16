@@ -1,49 +1,39 @@
-name: 🎮 Pella 自动续期
+name: PellaFree 自动续期
 
 on:
   schedule:
-    - cron: "10 12 * * *"   # 每 6 小时运行一次
+    - cron: '0 0 * * *'   # UTC 00:00 = 北京 08:00
+    - cron: '0 12 * * *'  # UTC 12:00 = 北京 20:00
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '手动触发原因（可选）'
+        required: false
+        default: '手动执行续期'
 
 jobs:
   renew:
-    name: 🔄 执行续期
+    name: 执行续期任务
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: 📥 拉取代码
+      - name: Checkout 代码
         uses: actions/checkout@v4
 
-      - name: 🟢 安装 Node.js
+      - name: 配置 Node.js 环境
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '20'
+          cache: 'npm'
 
-      - name: 📦 安装依赖
-        run: npm install
+      - name: 安装 Node 依赖
+        run: npm ci
 
-      - name: 🛡️ 启动 GOST（将 SOCKS5 转为 HTTP 代理）
-        if: ${{ secrets.GOST_PROXY != '' }}
+      - name: 执行续期脚本
         env:
+          ACCOUNT: ${{ secrets.ACCOUNT }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
-        run: |
-          echo "📦 下载并启动 GOST..."
-          VERSION=$(curl -s https://api.github.com/repos/ginuerzh/gost/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | tr -d 'v')
-          wget -q "https://github.com/ginuerzh/gost/releases/download/v${VERSION}/gost_${VERSION}_linux_amd64.tar.gz"
-          tar -xzf "gost_${VERSION}_linux_amd64.tar.gz"
-          chmod +x gost
-          nohup ./gost -L http://:8080 -F "$GOST_PROXY" > gost.log 2>&1 &
-          sleep 3
-          echo "🌐 当前出口 IP（通过 GOST）:"
-          curl -s -x http://127.0.0.1:8080 https://api.ipify.org || echo "❌ 代理连接失败"
-
-      - name: 🚀 运行续期脚本
-        env:
-          ACCOUNT:       ${{ secrets.PELLA_ACCOUNT }}
-          TG_BOT_TOKEN:  ${{ secrets.TG_BOT }}
-          TG_CHAT_ID:    ${{ secrets.TG_CHAT_ID }}
-
-          # 告诉 pella.js 自动启用代理
-          USE_GOST:      1
-        run: node pella.js
+        run: node renew.mjs
