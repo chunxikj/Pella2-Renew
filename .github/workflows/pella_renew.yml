@@ -1,7 +1,7 @@
 name: 🎮 Pella 自动续期
 on:
   schedule:
-    - cron: '0 1 * * *'
+  #  - cron: '0 1 * * *'
   workflow_dispatch:
 
 jobs:
