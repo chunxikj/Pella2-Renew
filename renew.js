@@ -1,14 +1,10 @@
 // renew.mjs - PellaFree 自动续期脚本 (GitHub Actions 版)
 // 支持通过 SOCKS5 代理 (gost) 固定 IP 运行
 
+import fetch from 'node-fetch';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-// ── 代理配置 ──────────────────────────────────────────────────
-// 环境变量 GOST_PROXY 格式示例:
-//   socks5://user:pass@host:port
-//   socks5://host:port
-//   http://user:pass@host:port
 const GOST_PROXY = process.env.GOST_PROXY || '';
 
 function createAgent() {
@@ -26,13 +22,13 @@ if (AGENT) {
   console.log('[代理] 未配置代理，直连运行');
 }
 
-// 统一 fetch 封装，自动注入代理 agent
 async function proxyFetch(url, options = {}) {
   if (AGENT) {
     options.agent = AGENT;
   }
   return fetch(url, options);
 }
+
 
 // ── 主入口 ────────────────────────────────────────────────────
 async function main() {
