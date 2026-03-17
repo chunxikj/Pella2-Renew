@@ -2,8 +2,8 @@ name: PellaFree 自动续期
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # UTC 00:00 = 北京 08:00
-    - cron: '0 12 * * *'  # UTC 12:00 = 北京 20:00
+    - cron: '0 0 * * *'
+    - cron: '0 12 * * *'
   workflow_dispatch:
     inputs:
       reason:
@@ -25,10 +25,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: 安装 Node 依赖
-        run: npm ci
+        run: npm install
 
       - name: 执行续期脚本
         env:
