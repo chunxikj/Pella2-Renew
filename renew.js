@@ -5,6 +5,7 @@ import fetch from 'node-fetch';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
+// ── 代理配置 ──────────────────────────────────────────────────
 const GOST_PROXY = process.env.GOST_PROXY || '';
 
 function createAgent() {
@@ -22,6 +23,7 @@ if (AGENT) {
   console.log('[代理] 未配置代理，直连运行');
 }
 
+// 统一 fetch 封装，自动注入代理 agent
 async function proxyFetch(url, options = {}) {
   if (AGENT) {
     options.agent = AGENT;
@@ -29,10 +31,24 @@ async function proxyFetch(url, options = {}) {
   return fetch(url, options);
 }
 
-
 // ── 主入口 ────────────────────────────────────────────────────
 async function main() {
   console.log('开始执行 PellaFree 自动续期…');
+
+  // ── IP 检测 ──────────────────────────────────────────────
+  console.log('[IP检测] 正在检测出口 IP...');
+  try {
+    const ipRes = await proxyFetch('https://api.ipify.org?format=json');
+    const ipData = await ipRes.json();
+    console.log(`[IP检测] 当前出口 IP: ${ipData.ip}`);
+
+    const geoRes = await proxyFetch(`http://ip-api.com/json/${ipData.ip}?lang=zh-CN`);
+    const geoData = await geoRes.json();
+    console.log(`[IP检测] 归属地: ${geoData.country} ${geoData.regionName} ${geoData.city} (${geoData.isp})`);
+  } catch (e) {
+    console.warn('[IP检测] 检测失败:', e.message);
+  }
+  // ────────────────────────────────────────────────────────
 
   const env = {
     ACCOUNT:      process.env.ACCOUNT,
@@ -79,7 +95,6 @@ function parseAccounts(accountStr) {
   return accountStr
     .split('\n')
     .map(line => line.trim())
-    // 同时兼容 —– (em dash) 和普通 --- 分隔符
     .filter(line => line && (line.includes('—–') || line.includes('---')))
     .map(line => {
       const separator = line.includes('—–') ? '—–' : '---';
@@ -100,7 +115,6 @@ async function processAccount(account) {
   let servers = await getServers(authData.token);
   console.log(`获取到 ${servers.length} 个服务器`);
 
-  // 记录续期前状态
   const beforeState = {};
   for (const server of servers) {
     const renewLinks = server.renew_links || [];
@@ -354,7 +368,19 @@ async function redeployServer(token, serverId) {
 
 // ── Telegram 通知 ─────────────────────────────────────────────
 async function sendTelegramNotification(env, results) {
-  const message = formatNotificationMessage(results);
+  // 查出口 IP
+  let ipInfo = '未知';
+  try {
+    const ipRes = await proxyFetch('https://api.ipify.org?format=json');
+    const ipData = await ipRes.json();
+    const geoRes = await proxyFetch(`http://ip-api.com/json/${ipData.ip}?lang=zh-CN`);
+    const geoData = await geoRes.json();
+    ipInfo = `${ipData.ip} (${geoData.country} ${geoData.city} / ${geoData.isp})`;
+  } catch (e) {
+    ipInfo = '检测失败';
+  }
+
+  const message = formatNotificationMessage(results, ipInfo);
   const res = await proxyFetch(
     `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`,
     {
@@ -370,9 +396,12 @@ async function sendTelegramNotification(env, results) {
   }
 }
 
-function formatNotificationMessage(results) {
+function formatNotificationMessage(results, ipInfo = '未知') {
   const lines = ['📋 PellaFree 续期报告', ''];
   const now   = new Date();
+
+  lines.push(`🌐 出口IP: <code>${escapeHtml(ipInfo)}</code>`);
+  lines.push('');
 
   for (const result of results) {
     lines.push(`账号: ${escapeHtml(result.email)}`);
@@ -390,8 +419,8 @@ function formatNotificationMessage(results) {
     }
 
     for (const server of result.servers) {
-      const statusText     = server.status === 'running' ? '运行中' : '已关机';
-      const remainingTime  = calcRemaining(server.expiry, now);
+      const statusText    = server.status === 'running' ? '运行中' : '已关机';
+      const remainingTime = calcRemaining(server.expiry, now);
 
       lines.push(`${statusText} | IP: <code>${server.ip || 'N/A'}</code>`);
 
