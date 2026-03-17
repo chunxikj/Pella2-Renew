@@ -1,0 +1,39 @@
+name: PellaFree 自动续期
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # UTC 00:00 = 北京 08:00
+    - cron: '0 12 * * *'  # UTC 12:00 = 北京 20:00
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '手动触发原因（可选）'
+        required: false
+        default: '手动执行续期'
+
+jobs:
+  renew:
+    name: 执行续期任务
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安装 Node 依赖
+        run: npm ci
+
+      - name: 执行续期脚本
+        env:
+          ACCOUNT: ${{ secrets.ACCOUNT }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GOST_PROXY: ${{ secrets.GOST_PROXY }}
+        run: node renew.mjs
