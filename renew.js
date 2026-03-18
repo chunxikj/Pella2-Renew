@@ -131,34 +131,46 @@ async function processAccount(account) {
     const renewLinks = server.renew_links || [];
     const unclaimedLinks = renewLinks.filter(link => link.claimed === false);
 
-    console.log(`服务器 ${server.id}: 总${renewLinks.length}, 可用${unclaimedLinks.length}`);
+    console.log(`服务器 ${server.id}: 总${renewLinks.length}, 可用${unclaimedLinks.length}, 状态${server.status}`);
 
     if (unclaimedLinks.length === 0) {
       renewResults.push({ serverId: server.id, skipped: true, message: '无可用链接' });
-      continue;
-    }
+    } else {
+      let isRenewSuccess = false;
 
-    let isRenewSuccess = false;
+      for (let i = 0; i < unclaimedLinks.length; i++) {
+        const renewLink = unclaimedLinks[i];
+        console.log(`处理续期链接 ${i + 1}/${unclaimedLinks.length}`);
+        console.log(`>>> 广告链接: ${renewLink.link}`);
 
-    for (let i = 0; i < unclaimedLinks.length; i++) {
-      const renewLink = unclaimedLinks[i];
-      console.log(`处理续期链接 ${i + 1}/${unclaimedLinks.length}`);
-      console.log(`>>> 广告链接: ${renewLink.link}`);
-
-      try {
-        const result = await renewServer(authData.token, server.id, renewLink.link);
-        renewResults.push({ serverId: server.id, success: result.success, message: result.message });
-        console.log(`续期结果: ${result.success ? '成功' : '失败'} - ${result.message}`);
-        if (result.success) isRenewSuccess = true;
-      } catch (error) {
-        console.error('续期失败:', error.message);
-        renewResults.push({ serverId: server.id, success: false, message: error.message });
+        try {
+          const result = await renewServer(authData.token, server.id, renewLink.link);
+          renewResults.push({ serverId: server.id, success: result.success, message: result.message });
+          console.log(`续期结果: ${result.success ? '成功' : '失败'} - ${result.message}`);
+          if (result.success) isRenewSuccess = true;
+        } catch (error) {
+          console.error('续期失败:', error.message);
+          renewResults.push({ serverId: server.id, success: false, message: error.message });
+        }
+        await delay(2000);
       }
-      await delay(2000);
+
+      // 续期成功后记录
+      if (isRenewSuccess) {
+        console.log(`服务器 ${server.id} 续期成功`);
+      }
     }
 
-    if (isRenewSuccess) {
-      console.log(`服务器 ${server.id} 续期成功，正在发送重启请求...`);
+    // ── 重启判断：续期成功 或 服务器 offline ──────────────
+    const isOffline = server.status !== 'running';
+    const isRenewSuccess = renewResults.some(r => r.serverId === server.id && !r.isRedeploy && !r.skipped && r.success);
+
+    if (isRenewSuccess || isOffline) {
+      if (isOffline && !isRenewSuccess) {
+        console.log(`服务器 ${server.id} 状态为 offline，未续期但触发重启...`);
+      } else {
+        console.log(`服务器 ${server.id} 续期成功，正在发送重启请求...`);
+      }
       try {
         await delay(2000);
         const redeployResult = await redeployServer(authData.token, server.id);
@@ -166,7 +178,9 @@ async function processAccount(account) {
           serverId: server.id,
           isRedeploy: true,
           success: redeployResult.success,
-          message: redeployResult.message,
+          message: isOffline && !isRenewSuccess
+            ? `离线重启: ${redeployResult.message}`
+            : redeployResult.message,
         });
         console.log(`重启结果: ${redeployResult.success ? '成功' : '失败'} - ${redeployResult.message}`);
       } catch (error) {
@@ -368,7 +382,6 @@ async function redeployServer(token, serverId) {
 
 // ── Telegram 通知 ─────────────────────────────────────────────
 async function sendTelegramNotification(env, results) {
-  // 查出口 IP
   let ipInfo = '未知';
   try {
     const ipRes = await proxyFetch('https://api.ipify.org?format=json');
